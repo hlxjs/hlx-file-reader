@@ -1,10 +1,10 @@
-[![Build Status](https://travis-ci.org/hls-streams/file-reader.svg?branch=master)](https://travis-ci.org/hls-streams/file-reader)
-[![Coverage Status](https://coveralls.io/repos/github/hls-streams/file-reader/badge.svg?branch=master)](https://coveralls.io/github/hls-streams/file-reader?branch=master)
-[![Dependency Status](https://david-dm.org/hls-streams/file-reader.svg)](https://david-dm.org/hls-streams/file-reader)
-[![Development Dependency Status](https://david-dm.org/hls-streams/file-reader/dev-status.svg)](https://david-dm.org/hls-streams/file-reader#info=devDependencies)
+[![Build Status](https://travis-ci.org/hlxjs/hlx-file-reader.svg?branch=master)](https://travis-ci.org/hlxjs/hlx-file-reader)
+[![Coverage Status](https://coveralls.io/repos/github/hlxjs/hlx-file-reader/badge.svg?branch=master)](https://coveralls.io/github/hlxjs/hlx-file-reader?branch=master)
+[![Dependency Status](https://david-dm.org/hlxjs/hlx-file-reader.svg)](https://david-dm.org/hlxjs/hlx-file-reader)
+[![Development Dependency Status](https://david-dm.org/hlxjs/hlx-file-reader/dev-status.svg)](https://david-dm.org/hlxjs/hlx-file-reader#info=devDependencies)
 [![XO code style](https://img.shields.io/badge/code_style-XO-5ed9c7.svg)](https://github.com/sindresorhus/xo)
 
-# file-reader
+# hlx-file-reader
 
 A readable stream that reads an HLS stream and populates [`hls-parser`](https://github.com/kuu/hls-parser) objects
 
@@ -15,11 +15,11 @@ A readable stream that reads an HLS stream and populates [`hls-parser`](https://
   * Populates playlists and segments as structured JS objects ( [`hls-parser`](https://github.com/kuu/hls-parser) objects) that can be read via event listeners
 
 ## Install
-[![NPM](https://nodei.co/npm/hls-streams-file-reader.png?mini=true)](https://nodei.co/npm/hls-streams-file-reader/)
+[![NPM](https://nodei.co/npm/hlx-file-reader.png?mini=true)](https://nodei.co/npm/hlx-file-reader/)
 
 ## Usage
 ```js
-const {createReadStream} = require('hls-streams-file-reader');
+const {createReadStream} = require('hlx-file-reader');
 // Create a readable stream from a URL
 const stream = createReadStream('https://foo.com/bar.m3u8');
 // a hook for filtering variants (optional)

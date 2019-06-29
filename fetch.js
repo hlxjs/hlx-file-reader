@@ -2,7 +2,7 @@ const fs = require('fs');
 const fetch = require('node-fetch');
 const debug = require('debug');
 
-const print = debug('hls-streams-file-reader');
+const print = debug('hlx-file-reader');
 
 function fileFetch(path, {readAsBuffer, rawResponse}) {
   print(`fileFetch(${path}, readAsBuffer=${readAsBuffer}, rawResponse=${rawResponse})`);

@@ -5,7 +5,7 @@ const HLS = require('hls-parser');
 const Loader = require('./loader');
 const utils = require('./utils');
 
-const print = debug('hls-streams-file-reader');
+const print = debug('hlx-file-reader');
 
 function digest(str) {
   const md5 = crypto.createHash('md5');

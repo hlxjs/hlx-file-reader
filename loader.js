@@ -4,7 +4,7 @@ const utils = require('./utils');
 const fetch = require('./fetch');
 const Cache = require('./cache');
 
-const print = debug('hls-streams-file-reader');
+const print = debug('hlx-file-reader');
 const MAX_EVENT_LISTENERS = 50;
 
 class Loader {

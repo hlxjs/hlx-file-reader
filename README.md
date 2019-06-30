@@ -69,7 +69,7 @@ stream.updateVariant();
 ## API
 The features are built on top of the Node's [readable streams](https://nodejs.org/api/stream.html#stream_readable_streams).
 
-### `createReadStream(url[, options])`
+### `createReadStream(location[, options])`
 Creates a new `ReadStream` object.
 
 #### params
@@ -82,6 +82,7 @@ Creates a new `ReadStream` object.
 | Name        | Type   | Default | Description                       |
 | ----------- | ------ | ------- | --------------------------------- |
 | concurrency | number | 6       | Max number of requests concurrently processed |
+| rootPath | string | CWD  | Required if the `location` is a local file path and any root relative URLs (starting with '/') are contained in the playlist |
 | rawResponse | boolean | false   | If true, the segment file (`Segment.data`) is read as a readable stream, default is as a `Buffer` |
 
 #### return value

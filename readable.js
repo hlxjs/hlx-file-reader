@@ -3,7 +3,7 @@ const crypto = require('crypto');
 const debug = require('debug');
 const HLS = require('hls-parser');
 const Loader = require('./loader');
-const utils = require('./utils');
+const {THROW, tryCatch, resolveUrl} = require('./utils');
 
 const print = debug('hlx-file-reader');
 
@@ -22,20 +22,14 @@ function trimData(data, byterange) {
   return data;
 }
 
-function getUrl(url, base) {
-  return utils.createUrl(url, base);
-}
-
-function getUrlString(url, base) {
-  return getUrl(url, base).href;
-}
-
 class ReadStream extends stream.Readable {
-  constructor(url, options) {
+  constructor(location, options) {
     super({objectMode: true});
     this.loader = new Loader(options);
     this.state = 'initialized';
-    this.url = url;
+    this.rootPath = options.rootPath || process.cwd();
+    this.url = resolveUrl(options, location);
+    this.options = options;
     this.masterPlaylist = null;
     this.mediaPlaylists = [];
     this.counter = 0;
@@ -80,7 +74,7 @@ class ReadStream extends stream.Readable {
 
   updateVariant() {
     if (this.state !== 'reading') {
-      utils.THROW(new Error('the state should be "reading"'));
+      THROW(new Error('the state should be "reading"'));
     }
     const playlist = this.masterPlaylist;
     const {variants} = playlist;
@@ -91,7 +85,7 @@ class ReadStream extends stream.Readable {
     });
     for (const index of variantsToLoad) {
       const variant = variants[index];
-      this._loadPlaylist(getUrlString(variant.uri, playlist.uri));
+      this._loadPlaylist(resolveUrl(this.options, this.url, variant.uri));
       this._updateRendition(playlist, variant);
     }
   }
@@ -108,7 +102,7 @@ class ReadStream extends stream.Readable {
         for (const index of renditionsToLoad) {
           const url = renditions[index].uri;
           if (url) {
-            this._loadPlaylist(getUrlString(url, playlist.uri));
+            this._loadPlaylist(resolveUrl(this.options, this.url, url));
           }
         }
       }
@@ -157,7 +151,7 @@ class ReadStream extends stream.Readable {
     } else {
       print(`Wait for at least the target duration before attempting to reload the Playlist file again (${playlist.targetDuration}) sec`);
       setTimeout(() => {
-        this._loadPlaylist(playlist.uri);
+        this._loadPlaylist(resolveUrl(this.options, this.url, playlist.uri));
       }, playlist.targetDuration * 1000);
     }
   }
@@ -182,7 +176,7 @@ class ReadStream extends stream.Readable {
   _loadPlaylist(url) {
     print(`_loadPlaylist("${url}")`);
     this._INCREMENT();
-    this.loader.load(getUrl(url), {noCache: true}, (err, result) => {
+    this.loader.load(url, {noCache: true}, (err, result) => {
       this._DECREMENT();
       if (err) {
         return this._emit('error', err);
@@ -233,7 +227,7 @@ class ReadStream extends stream.Readable {
 
   _loadSegment(playlist, segment) {
     this._INCREMENT();
-    this.loader.load(getUrl(segment.uri, playlist.uri), {
+    this.loader.load(resolveUrl(this.options, this.url, playlist.uri, segment.uri), {
           readAsBuffer: true,
           rawResponse: this.rawResponseMode
         }, (err, result) => {
@@ -268,12 +262,12 @@ class ReadStream extends stream.Readable {
         continue;
       }
       this._INCREMENT();
-      this.loader.load(getUrl(sessionData.uri, playlist.uri), (err, result) => {
+      this.loader.load(resolveUrl(this.options, this.url, playlist.uri, sessionData.uri), (err, result) => {
         this._DECREMENT();
         if (err) {
           return this._emit('error', err);
         }
-        sessionData.data = utils.tryCatch(
+        sessionData.data = tryCatch(
           () => {
             return JSON.parse(result.data);
           },
@@ -295,7 +289,7 @@ class ReadStream extends stream.Readable {
 
   _loadKey(playlist, key, cb) {
     this._INCREMENT();
-    this.loader.load(getUrl(key.uri, playlist.uri), {readAsBuffer: true}, (err, result) => {
+    this.loader.load(resolveUrl(this.options, this.url, playlist.uri, key.uri), {readAsBuffer: true}, (err, result) => {
       this._DECREMENT();
       if (err) {
         return this._emit('error', err);
@@ -307,7 +301,7 @@ class ReadStream extends stream.Readable {
 
   _loadMap(playlist, map, cb) {
     this._INCREMENT();
-    this.loader.load(getUrl(map.uri, playlist.uri), {readAsBuffer: true}, (err, result) => {
+    this.loader.load(resolveUrl(this.options, this.url, playlist.uri, map.uri), {readAsBuffer: true}, (err, result) => {
       this._DECREMENT();
       if (err) {
         return this._emit('error', err);

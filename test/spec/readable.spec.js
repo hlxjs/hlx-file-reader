@@ -184,7 +184,7 @@ test.cb('createReadStream.renditions', t => {
   const spyData = sinon.spy(obj, 'onData');
   const spyEnd = sinon.spy(obj, 'onEnd');
 
-  createReadStream('./manifest/master.m3u8', {rootPath: cwd})
+  createReadStream('./manifest/master.m3u8')
   .on('variants', obj.onVariants)
   .on('renditions', obj.onRenditions)
   .on('data', obj.onData)

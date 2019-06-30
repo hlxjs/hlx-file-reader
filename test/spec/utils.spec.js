@@ -1,5 +1,15 @@
+const {URL} = require('url');
+const path = require('path');
 const test = require('ava');
-const utils = require('../../utils');
+const proxyquire = require('proxyquire');
+
+const mockFs = {
+  existsSync(path) {
+    return path === '/path/to/file';
+  }
+};
+
+const utils = proxyquire('../../utils', {fs: mockFs});
 
 test('utils.THROW', t => {
   try {
@@ -84,6 +94,31 @@ test('utils.tryCatch', t => {
   t.is(result, 0);
 });
 
+test('utils.resolveUrl', t => {
+  let url = utils.resolveUrl({}, 'https://abc.com/dir/file.ext');
+  t.is(url.href, 'https://abc.com/dir/file.ext');
+  url = utils.resolveUrl({}, 'https://abc.com/dir/file.ext', '//def.com/dir/file.ext');
+  t.is(url.href, 'https://def.com/dir/file.ext');
+  url = utils.resolveUrl({}, 'https://abc.com/dir/file.ext', '/dir2/file.ext');
+  t.is(url.href, 'https://abc.com/dir2/file.ext');
+  url = utils.resolveUrl({}, 'https://abc.com/dir/file.ext', 'dir2/file.ext');
+  t.is(url.href, 'https://abc.com/dir/dir2/file.ext');
+  url = utils.resolveUrl({}, '/path/to/file');
+  t.is(url.href, 'file:///path/to/file');
+  url = utils.resolveUrl({}, '/path/to/non-file');
+  t.is(url.href, 'file:///path/to/non-file');
+  url = utils.resolveUrl({rootPath: '/var'}, '/path/to/non-file');
+  t.is(url.href, 'file:///var/path/to/non-file');
+  url = utils.resolveUrl({rootPath: '/var'}, '../path/to/non-file');
+  t.is(url.href, 'file:///path/to/non-file');
+  url = utils.resolveUrl({}, './path/to/non-file');
+  t.is(url.href, `file://${process.cwd()}/path/to/non-file`);
+  url = utils.resolveUrl({}, 'https://abc.com/dir/file.ext', '/dir2/file.ext', 'low/01.ts');
+  t.is(url.href, 'https://abc.com/dir2/low/01.ts');
+  url = utils.resolveUrl({}, 'https://abc.com/dir/file.ext', 'dir2/file.ext', '01.ts');
+  t.is(url.href, 'https://abc.com/dir/dir2/01.ts');
+});
+
 test('utils.createUrl', t => {
   let url = utils.createUrl('http://abc.com');
   t.is(url.href, 'http://abc.com/');
@@ -91,4 +126,23 @@ test('utils.createUrl', t => {
   t.is(url.href, 'http://abc.com/');
   url = utils.createUrl('/abc', 'http://def.com');
   t.is(url.href, 'http://def.com/abc');
+});
+
+test('utils.fileURLToPath', t => {
+  const PATH = '/path/to/here';
+  const result = utils.fileURLToPath(new URL(`file://${PATH}`));
+  t.is(result, PATH);
+});
+
+test('utils.pathToFileURL', t => {
+  const PATH = '/path/to/here';
+  const result = utils.pathToFileURL(PATH);
+  t.is(result.pathname, PATH);
+});
+
+test('utils.pathToFileURL(...params)', t => {
+  const PATH = '../there';
+  const BASEPATH = '/path/to/here';
+  const result = utils.pathToFileURL(BASEPATH, PATH);
+  t.is(result.pathname, path.resolve(BASEPATH, PATH));
 });

@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const {URL} = require('url');
 
 function THROW(err) {
@@ -45,7 +47,7 @@ function tryCatch(...params) {
   }
 }
 
-function createUrl(url, base) {
+function createUrl(url, base = '') {
   return tryCatch(
     () => {
       return new URL(url);
@@ -54,9 +56,80 @@ function createUrl(url, base) {
       return new URL(url, base);
     },
     () => {
-      return {href: url};
+      return pathToFileURL(base, url);
     }
   );
+}
+
+function resolveUrl({rootPath = ''}, ...params) {
+  return params.reduce((accum, curr) => {
+    if (curr instanceof URL) {
+      return curr;
+    }
+    const type = getUrlType(curr);
+    if (type === 'absolute') {
+      return new URL(curr);
+    }
+    if (type === 'file') {
+      return pathToFileURL(curr);
+    }
+    if (type === 'scheme-relative') {
+      if (accum) {
+        return new URL(`${accum.protocol}${curr}`);
+      }
+      return new URL(`http:${curr}`);
+    }
+    if (type === 'path-absolute') {
+      if (accum && accum.protocol !== 'file:') {
+        accum.pathname = curr;
+        return accum;
+      }
+    }
+    if (type === 'path-relative') {
+      if (accum) {
+        accum.pathname = path.join(path.dirname(accum.pathname), curr);
+        return accum;
+      }
+    }
+    return pathToFileURL(path.join(rootPath, curr));
+  }, null);
+}
+
+function getUrlType(url) {
+  if (tryCatch(
+      () => {
+        url = new URL(url);
+        return true;
+      },
+      () => {
+        return false;
+      }
+    )) {
+    return 'absolute';
+  }
+
+  if (fs.existsSync(url)) {
+    return 'file';
+  }
+
+  if (url.startsWith('//')) {
+    return 'scheme-relative';
+  }
+
+  if (url.startsWith('/')) {
+    return 'path-absolute';
+  }
+
+  return 'path-relative';
+}
+
+function fileURLToPath(url) {
+  return url.pathname;
+}
+
+function pathToFileURL(...params) {
+  const fullPath = path.resolve(...params);
+  return new URL(`file://${fullPath}`);
 }
 
 module.exports = {
@@ -65,5 +138,8 @@ module.exports = {
   PARAMCHECK: process.env.NODE_ENV === 'production' ? _empty : PARAMCHECK,
   CONDITIONALPARAMCHECK: process.env.NODE_ENV === 'production' ? _empty : CONDITIONALPARAMCHECK,
   tryCatch,
-  createUrl
+  createUrl,
+  resolveUrl,
+  fileURLToPath,
+  pathToFileURL
 };

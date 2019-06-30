@@ -92,7 +92,7 @@ function createFetch() {
 test.cb('fetch.file', t => {
   const [fetch, readFileSpy, fetchSpy] = createFetch();
   const path = '/existing';
-  fetch({href: path})
+  fetch(new URL(`file://${path}`))
   .then(({data}) => {
     t.is(readFileSpy.callCount, 1);
     t.is(fetchSpy.callCount, 0);
@@ -105,7 +105,7 @@ test.cb('fetch.file', t => {
 test.cb('fetch.no-file', t => {
   const [fetch, readFileSpy, fetchSpy] = createFetch();
   const path = '/not-found';
-  fetch({href: path})
+  fetch(new URL(`file://${path}`))
   .catch(err => {
     t.is(readFileSpy.callCount, 0);
     t.is(fetchSpy.callCount, 0);
@@ -116,8 +116,7 @@ test.cb('fetch.no-file', t => {
 
 test.cb('fetch.url', t => {
   const [fetch, readFileSpy, fetchSpy] = createFetch();
-  const url = new URL('http://foo.bar/abc');
-  fetch(url)
+  fetch(new URL('http://foo.bar/abc'))
   .then(({data}) => {
     t.is(readFileSpy.callCount, 0);
     t.is(fetchSpy.callCount, 1);
@@ -128,8 +127,7 @@ test.cb('fetch.url', t => {
 
 test.cb('fetch.no-url', t => {
   const [fetch, readFileSpy, fetchSpy] = createFetch();
-  const url = new URL('http://foo.bar/def');
-  fetch(url)
+  fetch(new URL('http://foo.bar/def'))
   .catch(err => {
     t.is(readFileSpy.callCount, 0);
     t.is(fetchSpy.callCount, 1);
@@ -141,11 +139,11 @@ test.cb('fetch.no-url', t => {
 test.cb('fetch.readAsBuffer.file', t => {
   const [fetch, readFileSpy] = createFetch();
   const path = '/existing';
-  fetch({href: path})
+  fetch(new URL(`file://${path}`))
   .then(() => {
     t.is(readFileSpy.callCount, 1);
     t.true(readFileSpy.getCall(0).calledWith(path, {encoding: 'utf8'}));
-    fetch({href: path}, {readAsBuffer: true})
+    fetch(new URL(`file://${path}`), {readAsBuffer: true})
     .then(() => {
       t.is(readFileSpy.callCount, 2);
       t.true(readFileSpy.getCall(1).calledWith(path, {encoding: null}));
@@ -175,13 +173,13 @@ test.cb('fetch.readAsBuffer.url', t => {
 test.cb('fetch.rawResponse.file', t => {
   const [fetch, readFileSpy, fetchSpy, createReadStreamSpy] = createFetch();
   const path = '/existing';
-  fetch({href: path})
+  fetch(new URL(`file://${path}`))
   .then(({data}) => {
     t.is(readFileSpy.callCount, 1);
     t.is(fetchSpy.callCount, 0);
     t.is(createReadStreamSpy.callCount, 0);
     t.true(Buffer.isBuffer(data));
-    fetch({href: path}, {rawResponse: true})
+    fetch(new URL(`file://${path}`), {rawResponse: true})
     .then(({data}) => {
       t.is(createReadStreamSpy.callCount, 1);
       t.true(data instanceof Readable);

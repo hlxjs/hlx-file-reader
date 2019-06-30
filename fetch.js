@@ -49,10 +49,10 @@ function urlFetch(url, {readAsBuffer, rawResponse}) {
 }
 
 function universalFetch(url, options = {}) {
-  if (url.protocol) {
-    return urlFetch(url.href, options);
+  if (url.protocol === 'file:') {
+    return fileFetch(url.pathname, options);
   }
-  return fileFetch(url.href, options);
+  return urlFetch(url.href, options);
 }
 
 module.exports = universalFetch;

@@ -59,7 +59,7 @@ test.cb('loader.file', t => {
   const [Loader, fsSpy, urlSpy] = createLoader();
   const loader = new Loader();
   const path = '/existing';
-  loader.load({href: path}, err => {
+  loader.load(new URL(`file://${path}`), err => {
     t.is(fsSpy.callCount, 1);
     t.is(urlSpy.callCount, 0);
     t.is(err, null);
@@ -72,7 +72,7 @@ test.cb('loader.no-file', t => {
   const [Loader, fsSpy, urlSpy] = createLoader();
   const loader = new Loader();
   const path = '/not-found';
-  loader.load({href: path}, err => {
+  loader.load(new URL(`file://${path}`), err => {
     t.is(fsSpy.callCount, 0);
     t.is(urlSpy.callCount, 0);
     t.not(err, null);
@@ -108,13 +108,13 @@ test.cb('loader.cache', t => {
   const [Loader, fsSpy] = createLoader();
   const loader = new Loader();
   const path = '/existing';
-  loader.load({href: path}, err => {
+  loader.load(new URL(`file://${path}`), err => {
     t.is(fsSpy.callCount, 1);
     t.is(err, null);
-    loader.load({href: path}, err => {
+    loader.load(new URL(`file://${path}`), err => {
       t.is(fsSpy.callCount, 1); // cache should work
       t.is(err, null);
-      loader.load({href: path}, {noCache: true}, err => {
+      loader.load(new URL(`file://${path}`), {noCache: true}, err => {
         t.is(fsSpy.callCount, 2); // cache should not work
         t.is(err, null);
         t.end();

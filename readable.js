@@ -314,7 +314,7 @@ class ReadStream extends stream.Readable {
 
   _emit(...params) {
     if (params[0] === 'data') {
-      this.push(params[1]); // TODO: stop loading segments when this.push() returns false
+      this.push(Object.assign({}, params[1])); // TODO: stop loading segments when this.push() returns false
     } else {
       this.emit(...params);
     }

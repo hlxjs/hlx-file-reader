@@ -42,6 +42,7 @@
       "no-cond-assign": 0,
       "no-multi-assign": 0,
       "padding-line-between-statements": 0,
+      "prefer-object-spread": 0,
       "promise/prefer-await-to-then": 0,
       "import/no-dynamic-require": 0,
       "unicorn/catch-error-name": 0,

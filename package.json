@@ -1,6 +1,6 @@
 {
   "name": "hlx-file-reader",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "A readable stream that reads an HLS stream and populates data as JS objects",
   "main": "./index.js",
   "directories": {

@@ -81,14 +81,12 @@ function resolveUrl({rootPath = ''}, ...params) {
     }
     if (type === 'path-absolute') {
       if (accum && accum.protocol !== 'file:') {
-        accum.pathname = curr;
-        return accum;
+        return new URL(curr, accum.href);
       }
     }
     if (type === 'path-relative') {
       if (accum) {
-        accum.pathname = path.join(path.dirname(accum.pathname), curr);
-        return accum;
+        return new URL(curr, accum.href);
       }
     }
     return pathToFileURL(path.join(rootPath, curr));

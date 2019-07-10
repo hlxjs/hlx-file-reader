@@ -117,6 +117,14 @@ test('utils.resolveUrl', t => {
   t.is(url.href, 'https://abc.com/dir2/low/01.ts');
   url = utils.resolveUrl({}, 'https://abc.com/dir/file.ext', 'dir2/file.ext', '01.ts');
   t.is(url.href, 'https://abc.com/dir/dir2/01.ts');
+  url = utils.resolveUrl({}, 'https://abc.com/dir/file.ext?version=1', '/dir2/file.ext?version=2');
+  t.is(url.href, 'https://abc.com/dir2/file.ext?version=2');
+  url = utils.resolveUrl({}, 'https://abc.com/dir/file.ext?version=1', 'dir2/file.ext?version=2');
+  t.is(url.href, 'https://abc.com/dir/dir2/file.ext?version=2');
+  url = utils.resolveUrl({}, 'https://abc.com/dir/file.ext#default', '/dir2/file.ext#default2');
+  t.is(url.href, 'https://abc.com/dir2/file.ext#default2');
+  url = utils.resolveUrl({}, 'https://abc.com/dir/file.ext#default', 'dir2/file.ext#default2');
+  t.is(url.href, 'https://abc.com/dir/dir2/file.ext#default2');
 });
 
 test('utils.createUrl', t => {

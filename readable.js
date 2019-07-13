@@ -22,6 +22,42 @@ function trimData(data, byterange) {
   return data;
 }
 
+function clone(data) {
+  if (!data) {
+    return data;
+  }
+  return Object.assign({}, data);
+}
+
+function cloneList(data, prop) {
+  data[prop] = [...(data[prop])];
+  const list = data[prop];
+  for (let i = 0; i < list.length; i++) {
+    list[i] = clone(list[i]);
+  }
+}
+
+function cloneData(data) {
+  if (data.type === 'segment') {
+    return data; // No need to clone
+  }
+  if (data.isMasterPlaylist) {
+    const masterPlaylist = clone(data);
+    // Clone variants
+    ['variants', 'sessionDataList', 'sessionKeyList'].forEach(prop => cloneList(masterPlaylist, prop));
+    const {variants} = masterPlaylist;
+    for (const v of variants) {
+      const variant = clone(v);
+      // Clone renditions
+      ['audio', 'video', 'subtitles', 'closedCaptions'].forEach(prop => cloneList(variant, prop));
+    }
+    return masterPlaylist;
+  }
+  const mediaPlaylist = clone(data);
+  cloneList(mediaPlaylist, 'segments');
+  return mediaPlaylist;
+}
+
 class ReadStream extends stream.Readable {
   constructor(location, options) {
     super({objectMode: true});
@@ -110,6 +146,7 @@ class ReadStream extends stream.Readable {
   }
 
   _updateMediaPlaylist(playlist) {
+    print(`_updateMediaPlaylist(uri="${playlist.uri}")`);
     const {mediaPlaylists} = this;
     const oldPlaylistIndex = mediaPlaylists.findIndex(elem => {
       if (elem.uri === playlist.uri) {
@@ -147,7 +184,9 @@ class ReadStream extends stream.Readable {
     }
 
     if (playlist.playlistType === 'VOD' || playlist.endlist) {
-      this.state = 'ended';
+      if (this.state === 'reading') {
+        this.state = 'ended';
+      }
     } else {
       print(`Wait for at least the target duration before attempting to reload the Playlist file again (${playlist.targetDuration}) sec`);
       setTimeout(() => {
@@ -188,7 +227,7 @@ class ReadStream extends stream.Readable {
       }
       const playlist = HLS.parse(result.data);
       playlist.source = result.data;
-      playlist.uri = url;
+      playlist.uri = url.href;
       if (playlist.isMasterPlaylist) {
         // Master Playlist
         this._emitPlaylistEvent(playlist);
@@ -226,6 +265,7 @@ class ReadStream extends stream.Readable {
   }
 
   _loadSegment(playlist, segment) {
+    print(`_loadSegment("${segment.uri}")`);
     this._INCREMENT();
     this.loader.load(resolveUrl(this.options, this.url, playlist.uri, segment.uri), {
           readAsBuffer: true,
@@ -314,14 +354,17 @@ class ReadStream extends stream.Readable {
 
   _emit(...params) {
     if (params[0] === 'data') {
-      this.push(Object.assign({}, params[1])); // TODO: stop loading segments when this.push() returns false
+      this.push(cloneData(params[1])); // TODO: stop loading segments when this.push() returns false
     } else {
       this.emit(...params);
     }
     if (this.consumed) {
-      this.push(null);
-      this.masterPlaylist = null;
-      this.mediaPlaylists = [];
+      this.state = 'close';
+      setTimeout(() => {
+        this.masterPlaylist = null;
+        this.mediaPlaylists = [];
+        this.push(null);
+      }, 500);
     }
   }
 

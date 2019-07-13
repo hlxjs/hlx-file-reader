@@ -1,10 +1,11 @@
 const path = require('path');
-const {Readable} = require('stream');
+const {Readable, Transform} = require('stream');
 const test = require('ava');
 const sinon = require('sinon');
 const proxyquire = require('proxyquire');
+const rewrite = require('../helper/rewriter');
 
-function getDataAndType(url) {
+function getDataAndType(url, end) {
   const type = 'application/vnd.apple.mpegurl';
   if (url.endsWith('master.m3u8')) {
     return [`
@@ -30,20 +31,24 @@ function getDataAndType(url) {
     `, type];
   }
   if (url.endsWith('.m3u8')) {
-    return [`
-      #EXTM3U
-      #EXT-X-VERSION:3
-      #EXT-X-TARGETDURATION:10
-      #EXTINF:9.009,
-      http://media.example.com/${buildFileBase(url)}-01.ts
-      #EXTINF:9.009,
-      http://media.example.com/${buildFileBase(url)}-02.ts
-      #EXTINF:3.003,
-      http://media.example.com/${buildFileBase(url)}-03.ts
-      #EXT-X-ENDLIST
-    `, type];
+    return [buildMediaPlaylist(url, end), type];
   }
   return [Buffer.alloc(10), 'video/mp2t'];
+}
+
+function buildMediaPlaylist(url, end) {
+  return `
+    #EXTM3U
+    #EXT-X-VERSION:3
+    #EXT-X-TARGETDURATION:2
+    #EXTINF:2.009,
+    http://media.example.com/${buildFileBase(url)}-01.ts
+    #EXTINF:2.009,
+    http://media.example.com/${buildFileBase(url)}-02.ts
+    #EXTINF:1.003,
+    http://media.example.com/${buildFileBase(url)}-03.ts
+    ${end ? '#EXT-X-ENDLIST' : ''}
+  `;
 }
 
 function buildFileBase(playlistUrl) {
@@ -111,6 +116,8 @@ test('createReadStream', t => {
 });
 */
 
+const endFlag = {};
+
 test.cb('createReadStream.renditions', t => {
   const mockFs = {
     existsSync() {
@@ -125,7 +132,8 @@ test.cb('createReadStream.renditions', t => {
     readFile(...params) {
       const path = params[0];
       const cb = params.pop();
-      const [data] = getDataAndType(path);
+      const [data] = getDataAndType(path, endFlag[path]);
+      endFlag[path] = true;
       t.true(pathList.includes(path));
       setImmediate(() => {
         cb(null, data);
@@ -137,7 +145,8 @@ test.cb('createReadStream.renditions', t => {
     fetch(url) {
       // console.log(`[mockFetch] url=${url}, params=${params}`);
       t.true(urlList.includes(url));
-      const [data, type] = getDataAndType(url);
+      const [data, type] = getDataAndType(url, endFlag[url]);
+      endFlag[url] = true;
       return Promise.resolve({
         status: 200,
         statusText: 'OK',
@@ -179,6 +188,17 @@ test.cb('createReadStream.renditions', t => {
     }
   };
 
+  class Modifier extends Transform {
+    constructor() {
+      super({objectMode: true});
+    }
+
+    _transform(data, _, cb) {
+      rewrite(data);
+      cb(null, data);
+    }
+  }
+
   const spyVariants = sinon.spy(obj, 'onVariants');
   const spyRenditions = sinon.spy(obj, 'onRenditions');
   const spyData = sinon.spy(obj, 'onData');
@@ -187,13 +207,14 @@ test.cb('createReadStream.renditions', t => {
   createReadStream('./manifest/master.m3u8')
   .on('variants', obj.onVariants)
   .on('renditions', obj.onRenditions)
+  .pipe(new Modifier())
   .on('data', obj.onData)
   .on('end', obj.onEnd);
 
   function checkResult() {
     t.is(spyVariants.callCount, 1);
     t.is(spyRenditions.callCount, 3);
-    t.is(spyData.callCount, 1 + 9 + 27);
+    t.is(spyData.callCount, 1 + (9 * 2) + 27);
     t.true(spyEnd.calledOnce);
     t.end();
   }

@@ -10,7 +10,8 @@
     "lint": "xo",
     "e2e": "node ./e2e",
     "coverage": "nyc npm test && nyc report --reporter=text-lcov | coveralls",
-    "test": "npm run lint && npm audit --audit-level high && ava --verbose"
+    "audit": "npm audit --audit-level high",
+    "test": "npm run lint && npm run audit && ava --verbose"
   },
   "repository": {
     "type": "git",
@@ -31,10 +32,16 @@
   "engines": {
     "node": ">=8.0.0"
   },
+  "ava": {
+    "helpers": [
+      "test/helper/**/*"
+    ]
+  },
   "xo": {
     "esnext": true,
     "space": true,
     "rules": {
+      "camelcase": 0,
       "capitalized-comments": 0,
       "dot-notation": 0,
       "indent": 0,

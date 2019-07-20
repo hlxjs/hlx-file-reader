@@ -70,6 +70,7 @@ class ReadStream extends stream.Readable {
     this.mediaPlaylists = [];
     this.counter = 0;
     this.rawResponseMode = Boolean(options.rawResponse);
+    this.pendingList = new Set();
   }
 
   _INCREMENT() {
@@ -78,10 +79,49 @@ class ReadStream extends stream.Readable {
 
   _DECREMENT() {
     this.counter--;
+    this._checkIfConsumed();
   }
 
   get consumed() {
-    return this.state === 'ended' && this.counter === 0;
+    return this.state === 'ended' && this.pendingList.size === 0 && this.counter === 0;
+  }
+
+  _checkIfConsumed() {
+    if (this.consumed) {
+      this.state = 'close';
+      setImmediate(() => {
+        this._cancelAll();
+        this.masterPlaylist = null;
+        this.mediaPlaylists = [];
+        this.push(null);
+      });
+    }
+  }
+
+  _scedule(func, timeout) {
+    if (this.state === 'ended') {
+      return false;
+    }
+    const id = setTimeout(() => {
+      this.pendingList.delete(id);
+      func();
+      this._checkIfConsumed();
+    }, timeout);
+    this.pendingList.add(id);
+    return true;
+  }
+
+  _cancelAll() {
+    for (const timerId of this.pendingList) {
+      clearTimeout(timerId);
+    }
+    this.pendingList.clear();
+  }
+
+  _checkIfAllEnd() {
+    return this.mediaPlaylists.every(playlist => {
+      return playlist.playlistType === 'VOD' || playlist.endlist;
+    });
   }
 
   _deferIfUnchanged(url, hash) {
@@ -93,7 +133,7 @@ class ReadStream extends stream.Readable {
       const waitSeconds = playlist.targetDuration * 1.5;
       if (playlist.playlistType !== 'VOD' && playlist.hash === hash) {
         print(`No update. Wait for a period of one-half the target duration before retrying (${waitSeconds}) sec`);
-        setTimeout(() => {
+        this._scedule(() => {
           this._loadPlaylist(url);
         }, waitSeconds * 1000);
         return true;
@@ -184,12 +224,13 @@ class ReadStream extends stream.Readable {
     }
 
     if (playlist.playlistType === 'VOD' || playlist.endlist) {
-      if (this.state === 'reading') {
+      if (this._checkIfAllEnd()) {
+        print('State is set to "ended"');
         this.state = 'ended';
       }
     } else {
       print(`Wait for at least the target duration before attempting to reload the Playlist file again (${playlist.targetDuration}) sec`);
-      setTimeout(() => {
+      this._scedule(() => {
         this._loadPlaylist(resolveUrl(this.options, this.url, playlist.uri));
       }, playlist.targetDuration * 1000);
     }
@@ -357,14 +398,6 @@ class ReadStream extends stream.Readable {
       this.push(cloneData(params[1])); // TODO: stop loading segments when this.push() returns false
     } else {
       this.emit(...params);
-    }
-    if (this.consumed) {
-      this.state = 'close';
-      setTimeout(() => {
-        this.masterPlaylist = null;
-        this.mediaPlaylists = [];
-        this.push(null);
-      }, 500);
     }
   }
 

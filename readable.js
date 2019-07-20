@@ -67,7 +67,7 @@ class ReadStream extends stream.Readable {
     this.url = resolveUrl(options, location);
     this.options = options;
     this.masterPlaylist = null;
-    this.mediaPlaylists = [];
+    this.mediaPlaylists = {};
     this.counter = 0;
     this.rawResponseMode = Boolean(options.rawResponse);
     this.pendingList = new Set();
@@ -92,7 +92,7 @@ class ReadStream extends stream.Readable {
       setImmediate(() => {
         this._cancelAll();
         this.masterPlaylist = null;
-        this.mediaPlaylists = [];
+        this.mediaPlaylists = {};
         this.push(null);
       });
     }
@@ -119,32 +119,32 @@ class ReadStream extends stream.Readable {
   }
 
   _checkIfAllEnd() {
-    return this.mediaPlaylists.every(playlist => {
-      return playlist.playlistType === 'VOD' || playlist.endlist;
-    });
+    for (const playlist of Object.values(this.mediaPlaylists)) {
+      if (playlist.playlistType === 'VOD' || playlist.endlist) {
+        continue;
+      }
+      return false;
+    }
+    return true;
   }
 
   _deferIfUnchanged(url, hash) {
     const {mediaPlaylists} = this;
-    if (mediaPlaylists.length === 0) {
-      return false;
-    }
-    for (const playlist of mediaPlaylists) {
+    const playlist = mediaPlaylists[url];
+    if (playlist && playlist.playlistType !== 'VOD' && playlist.hash === hash) {
       const waitSeconds = playlist.targetDuration * 0.5;
-      if (playlist.playlistType !== 'VOD' && playlist.hash === hash) {
-        print(`No update. Wait for a period of one-half the target duration before retrying (${waitSeconds}) sec`);
-        this._scedule(() => {
-          this._loadPlaylist(url);
-        }, waitSeconds * 1000);
-        return true;
-      }
+      print(`No update. Wait for a period of one-half the target duration before retrying (${waitSeconds}) sec`);
+      this._scedule(() => {
+        this._loadPlaylist(url);
+      }, waitSeconds * 1000);
+      return true;
     }
     return false;
   }
 
   _updateMasterPlaylist(playlist) {
     this.masterPlaylist = playlist;
-    this.mediaPlaylists = [];
+    this.mediaPlaylists = {};
     this.updateVariant();
   }
 
@@ -188,14 +188,7 @@ class ReadStream extends stream.Readable {
   _updateMediaPlaylist(playlist) {
     print(`_updateMediaPlaylist(uri="${playlist.uri}")`);
     const {mediaPlaylists} = this;
-    const oldPlaylistIndex = mediaPlaylists.findIndex(elem => {
-      if (elem.uri === playlist.uri) {
-        return true;
-      }
-      return false;
-    });
-
-    const oldPlaylist = oldPlaylistIndex === -1 ? null : mediaPlaylists[oldPlaylistIndex];
+    const oldPlaylist = mediaPlaylists[playlist.uri];
     const newSegments = playlist.segments;
     for (const segment of newSegments) {
       if (oldPlaylist) {
@@ -217,11 +210,7 @@ class ReadStream extends stream.Readable {
       }
     }
 
-    if (oldPlaylist) {
-      mediaPlaylists[oldPlaylistIndex] = playlist;
-    } else {
-      mediaPlaylists.push(playlist);
-    }
+    mediaPlaylists[playlist.uri] = playlist;
 
     if (playlist.playlistType === 'VOD' || playlist.endlist) {
       if (this._checkIfAllEnd()) {

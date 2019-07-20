@@ -130,7 +130,7 @@ class ReadStream extends stream.Readable {
       return false;
     }
     for (const playlist of mediaPlaylists) {
-      const waitSeconds = playlist.targetDuration * 1.5;
+      const waitSeconds = playlist.targetDuration * 0.5;
       if (playlist.playlistType !== 'VOD' && playlist.hash === hash) {
         print(`No update. Wait for a period of one-half the target duration before retrying (${waitSeconds}) sec`);
         this._scedule(() => {

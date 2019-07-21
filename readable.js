@@ -3,7 +3,7 @@ const crypto = require('crypto');
 const debug = require('debug');
 const HLS = require('hls-parser');
 const Loader = require('./loader');
-const {THROW, tryCatch, resolveUrl} = require('./utils');
+const {THROW, tryCatch, resolveUrl, masterPlaylistTimeout} = require('./utils');
 
 const print = debug('hlx-file-reader');
 
@@ -66,7 +66,7 @@ class ReadStream extends stream.Readable {
     options.rootPath = options.rootPath || process.cwd();
     this.url = resolveUrl(options, location);
     this.options = options;
-    this.masterPlaylist = null;
+    this.masterPlaylists = {};
     this.mediaPlaylists = {};
     this.counter = 0;
     this.rawResponseMode = Boolean(options.rawResponse);
@@ -91,7 +91,7 @@ class ReadStream extends stream.Readable {
       this.state = 'close';
       setImmediate(() => {
         this._cancelAll();
-        this.masterPlaylist = null;
+        this.masterPlaylists = {};
         this.mediaPlaylists = {};
         this.push(null);
       });
@@ -128,11 +128,33 @@ class ReadStream extends stream.Readable {
     return true;
   }
 
-  _deferIfUnchanged(url, hash) {
+  _needToReload(masterPlaylist) {
     const {mediaPlaylists} = this;
-    const playlist = mediaPlaylists[url];
-    if (playlist && playlist.playlistType !== 'VOD' && playlist.hash === hash) {
-      const waitSeconds = playlist.targetDuration * 0.5;
+    const {variants} = masterPlaylist;
+    let playlist;
+    for (const variant of variants) {
+      playlist = mediaPlaylists[variant.uri];
+      if (!playlist || (playlist.playlistType !== 'VOD' && !playlist.endlist)) {
+        return true;
+      }
+      ['audio', 'video', 'subtitles', 'closedCaptions'].forEach(prop => {
+        const renditions = variant[prop];
+        for (const rendition of renditions) {
+          playlist = mediaPlaylists[rendition.uri];
+          if (!playlist || (playlist.playlistType !== 'VOD' && !playlist.endlist)) {
+            return true;
+          }
+        }
+      });
+    }
+    return false;
+  }
+
+  _deferIfUnchanged(url, hash) {
+    const {masterPlaylists, mediaPlaylists} = this;
+    const playlist = masterPlaylists[url] || mediaPlaylists[url];
+    if (playlist && playlist.hash === hash) {
+      const waitSeconds = playlist.isMasterPlaylist ? masterPlaylistTimeout : playlist.targetDuration * 0.5;
       print(`No update. Wait for a period of one-half the target duration before retrying (${waitSeconds}) sec`);
       this._scedule(() => {
         this._loadPlaylist(url);
@@ -143,26 +165,54 @@ class ReadStream extends stream.Readable {
   }
 
   _updateMasterPlaylist(playlist) {
-    this.masterPlaylist = playlist;
-    this.mediaPlaylists = {};
-    this.updateVariant();
+    print(`_updateMasterPlaylist(uri="${playlist.uri}")`);
+    this.updateVariant(playlist);
+    this.masterPlaylists[playlist.uri] = playlist;
+    if (this._needToReload(playlist)) {
+      print(`Wait for ${masterPlaylistTimeout} sec`);
+      this._scedule(() => {
+        this._loadPlaylist(resolveUrl(this.options, playlist.uri));
+      }, masterPlaylistTimeout * 1000);
+    }
   }
 
-  updateVariant() {
+  updateVariant(playlist) {
     if (this.state !== 'reading') {
       THROW(new Error('the state should be "reading"'));
     }
-    const playlist = this.masterPlaylist;
+    const {masterPlaylists} = this;
+    const oldPlaylist = masterPlaylists[playlist.uri];
+    const oldVariants = oldPlaylist ? oldPlaylist.variants : [];
     const {variants} = playlist;
+
+    // Get feedback from the client
     let variantsToLoad = [...new Array(variants.length).keys()];
     this._emit('variants', variants, indices => {
-      // Get feedback from the client synchronously
       variantsToLoad = indices;
     });
+
+    // Load playlists
     for (const index of variantsToLoad) {
       const variant = variants[index];
-      this._loadPlaylist(resolveUrl(this.options, this.url, variant.uri));
-      this._updateRendition(playlist, variant);
+      const oldVariantIndex = oldVariants.findIndex(elem => {
+        if (elem.uri === variant.uri) {
+          return true;
+        }
+        return false;
+      });
+      const oldVariant = oldVariantIndex === -1 ? null : oldVariants[oldVariantIndex];
+      if (oldVariant) {
+        oldVariants.splice(oldVariantIndex, 1);
+      } else {
+        this._loadPlaylist(resolveUrl(this.options, this.url, variant.uri));
+        this._updateRendition(playlist, variant);
+      }
+    }
+
+    // Delete references to the variants removed from the master playlist
+    const {mediaPlaylists} = this;
+    for (const varint of oldVariants) {
+      delete mediaPlaylists[varint.uri];
     }
   }
 
@@ -189,22 +239,19 @@ class ReadStream extends stream.Readable {
     print(`_updateMediaPlaylist(uri="${playlist.uri}")`);
     const {mediaPlaylists} = this;
     const oldPlaylist = mediaPlaylists[playlist.uri];
-    const newSegments = playlist.segments;
-    for (const segment of newSegments) {
-      if (oldPlaylist) {
-        const oldSegment = oldPlaylist.segments.find(elem => {
-          if (elem.uri === segment.uri) {
-            return true;
-          }
-          return false;
-        });
-        if (oldSegment) {
-          segment.data = oldSegment.data;
-          segment.key = oldSegment.key;
-          segment.map = oldSegment.map;
-        } else {
-          this._loadSegment(playlist, segment);
+    const oldSegments = oldPlaylist ? oldPlaylist.segments : [];
+    const {segments} = playlist;
+    for (const segment of segments) {
+      const oldSegment = oldSegments.find(elem => {
+        if (elem.uri === segment.uri) {
+          return true;
         }
+        return false;
+      });
+      if (oldSegment) {
+        segment.data = oldSegment.data;
+        segment.key = oldSegment.key;
+        segment.map = oldSegment.map;
       } else {
         this._loadSegment(playlist, segment);
       }
@@ -258,6 +305,7 @@ class ReadStream extends stream.Readable {
       const playlist = HLS.parse(result.data);
       playlist.source = result.data;
       playlist.uri = url.href;
+      playlist.hash = hash;
       if (playlist.isMasterPlaylist) {
         // Master Playlist
         this._emitPlaylistEvent(playlist);
@@ -274,7 +322,6 @@ class ReadStream extends stream.Readable {
         this._updateMasterPlaylist(playlist);
       } else {
         // Media Playlist
-        playlist.hash = hash;
         this._emitPlaylistEvent(playlist);
         this._updateMediaPlaylist(playlist);
       }

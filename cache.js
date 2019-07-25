@@ -12,9 +12,16 @@ class Cache {
     let size;
     if (typeof data === 'string') {
       size = data.length * 2;
-    } else {
+    } else if (Buffer.isBuffer(data)) {
       size = data.length;
+    } else if ('data' in data) {
+      if (typeof data.data === 'string') {
+        size = data.data.length * 2;
+      } else if (Buffer.isBuffer(data.data)) {
+        size = data.data.length;
+      }
     }
+
     while (this.size + size > this.MAX_CACHE_SIZE) {
       const url = this.fifo.shift();
       const entry = this.map.get(url);

@@ -1,9 +1,11 @@
+const path = require('path');
+const {URL} = require('url');
 const stream = require('stream');
 const crypto = require('crypto');
 const debug = require('debug');
 const HLS = require('hls-parser');
 const Loader = require('./loader');
-const {THROW, tryCatch, resolveUrl, masterPlaylistTimeout} = require('./utils');
+const {THROW, tryCatch, getUrlType, masterPlaylistTimeout} = require('./utils');
 
 const print = debug('hlx-file-reader');
 
@@ -46,8 +48,7 @@ function cloneData(data) {
     // Clone variants
     ['variants', 'sessionDataList', 'sessionKeyList'].forEach(prop => cloneList(masterPlaylist, prop));
     const {variants} = masterPlaylist;
-    for (const v of variants) {
-      const variant = clone(v);
+    for (const variant of variants) {
       // Clone renditions
       ['audio', 'video', 'subtitles', 'closedCaptions'].forEach(prop => cloneList(variant, prop));
     }
@@ -63,14 +64,14 @@ class ReadStream extends stream.Readable {
     super({objectMode: true});
     this.loader = new Loader(options);
     this.state = 'initialized';
-    options.rootPath = options.rootPath || process.cwd();
-    this.url = resolveUrl(options, location);
+    this.initialUri = location;
+    options.rootPath = options.rootPath || '/';
     this.options = options;
     this.masterPlaylists = {};
     this.mediaPlaylists = {};
     this.counter = 0;
     this.rawResponseMode = Boolean(options.rawResponse);
-    this.pendingList = new Set();
+    this.pendingList = new Map();
   }
 
   _INCREMENT() {
@@ -79,17 +80,18 @@ class ReadStream extends stream.Readable {
 
   _DECREMENT() {
     this.counter--;
-    this._checkIfConsumed();
+    this._resetIfConsumed();
   }
 
   get consumed() {
     return this.state === 'ended' && this.pendingList.size === 0 && this.counter === 0;
   }
 
-  _checkIfConsumed() {
+  _resetIfConsumed() {
     if (this.consumed) {
       this.state = 'close';
       setImmediate(() => {
+        print('Cancel all pending events');
         this._cancelAll();
         this.masterPlaylists = {};
         this.mediaPlaylists = {};
@@ -98,21 +100,31 @@ class ReadStream extends stream.Readable {
     }
   }
 
-  _scedule(func, timeout) {
-    if (this.state === 'ended') {
+  _schedule(key, func, timeout) {
+    if (this.state === 'ended' || this.pendingList.has(key)) {
       return false;
     }
     const id = setTimeout(() => {
-      this.pendingList.delete(id);
+      this.pendingList.delete(key);
       func();
-      this._checkIfConsumed();
+      this._resetIfConsumed();
     }, timeout);
-    this.pendingList.add(id);
+    this.pendingList.set(key, id);
     return true;
   }
 
+  _cancel(key) {
+    const timerId = this.pendingList.get(key);
+    if (timerId) {
+      clearTimeout(timerId);
+      this.pendingList.delete(key);
+      return true;
+    }
+    return false;
+  }
+
   _cancelAll() {
-    for (const timerId of this.pendingList) {
+    for (const timerId of this.pendingList.values()) {
       clearTimeout(timerId);
     }
     this.pendingList.clear();
@@ -128,19 +140,59 @@ class ReadStream extends stream.Readable {
     return true;
   }
 
+  _resolveUri(uri, documentUri) {
+    if (!uri || (!uri.endsWith('master.m3u8') && !documentUri)) {
+      throw new Error('documentUri is undefined');
+    }
+    const type = getUrlType(uri);
+
+    if (type === 'absolute') {
+      return new URL(uri);
+    }
+
+    const documentUrl = tryCatch(
+      () => new URL(documentUri),
+      () => null
+    );
+
+    const {rootPath} = this.options;
+
+    if (type === 'scheme-relative') {
+      if (documentUrl) {
+        return new URL(`${documentUrl.protocol}${uri}`);
+      }
+      return new URL(`file:${rootPath}${uri}`);
+    }
+
+    if (type === 'path-absolute') {
+      if (documentUrl && documentUrl.protocol !== 'file:') {
+        return new URL(uri, documentUrl.href);
+      }
+    }
+
+    if (type === 'path-relative') {
+      if (documentUrl) {
+        return new URL(uri, documentUrl.href);
+      }
+    }
+
+    const fullPath = path.join(rootPath, uri);
+    return new URL(`file://${fullPath}`);
+  }
+
   _needToReload(masterPlaylist) {
     const {mediaPlaylists} = this;
     const {variants} = masterPlaylist;
     let playlist;
     for (const variant of variants) {
-      playlist = mediaPlaylists[variant.uri];
+      playlist = mediaPlaylists[this._resolveUri(variant.uri, masterPlaylist.uri)];
       if (!playlist || (playlist.playlistType !== 'VOD' && !playlist.endlist)) {
         return true;
       }
       ['audio', 'video', 'subtitles', 'closedCaptions'].forEach(prop => {
         const renditions = variant[prop];
         for (const rendition of renditions) {
-          playlist = mediaPlaylists[rendition.uri];
+          playlist = mediaPlaylists[this._resolveUri(rendition.uri, masterPlaylist.uri)];
           if (!playlist || (playlist.playlistType !== 'VOD' && !playlist.endlist)) {
             return true;
           }
@@ -150,14 +202,15 @@ class ReadStream extends stream.Readable {
     return false;
   }
 
-  _deferIfUnchanged(url, hash) {
+  _deferIfUnchanged(uri, documentUri, hash) {
     const {masterPlaylists, mediaPlaylists} = this;
-    const playlist = masterPlaylists[url] || mediaPlaylists[url];
+    const playlistUri = this._resolveUri(uri, documentUri);
+    const playlist = masterPlaylists[playlistUri] || mediaPlaylists[playlistUri];
     if (playlist && playlist.hash === hash) {
       const waitSeconds = playlist.isMasterPlaylist ? masterPlaylistTimeout : playlist.targetDuration * 0.5;
       print(`No update. Wait for a period of one-half the target duration before retrying (${waitSeconds}) sec`);
-      this._scedule(() => {
-        this._loadPlaylist(url);
+      this._schedule(playlistUri, () => {
+        this._loadPlaylist(uri, documentUri);
       }, waitSeconds * 1000);
       return true;
     }
@@ -170,8 +223,8 @@ class ReadStream extends stream.Readable {
     this.masterPlaylists[playlist.uri] = playlist;
     if (this._needToReload(playlist)) {
       print(`Wait for ${masterPlaylistTimeout} sec`);
-      this._scedule(() => {
-        this._loadPlaylist(resolveUrl(this.options, playlist.uri));
+      this._schedule(playlist.uri, () => {
+        this._loadPlaylist(playlist.uri, playlist.parentUri);
       }, masterPlaylistTimeout * 1000);
     }
   }
@@ -204,7 +257,7 @@ class ReadStream extends stream.Readable {
       if (oldVariant) {
         oldVariants.splice(oldVariantIndex, 1);
       } else {
-        this._loadPlaylist(resolveUrl(this.options, this.url, variant.uri));
+        this._loadPlaylist(variant.uri, playlist.uri);
         this._updateRendition(playlist, variant);
       }
     }
@@ -212,7 +265,7 @@ class ReadStream extends stream.Readable {
     // Delete references to the variants removed from the master playlist
     const {mediaPlaylists} = this;
     for (const varint of oldVariants) {
-      delete mediaPlaylists[varint.uri];
+      delete mediaPlaylists[this._resolveUri(varint.uri, playlist.uri)];
     }
   }
 
@@ -226,9 +279,9 @@ class ReadStream extends stream.Readable {
           renditionsToLoad = indices;
         });
         for (const index of renditionsToLoad) {
-          const url = renditions[index].uri;
-          if (url) {
-            this._loadPlaylist(resolveUrl(this.options, this.url, url));
+          const rendition = renditions[index];
+          if (rendition) {
+            this._loadPlaylist(rendition.uri, playlist.uri);
           }
         }
       }
@@ -255,19 +308,21 @@ class ReadStream extends stream.Readable {
       } else {
         this._loadSegment(playlist, segment);
       }
+      segment.parentUri = playlist.uri;
     }
 
     mediaPlaylists[playlist.uri] = playlist;
 
     if (playlist.playlistType === 'VOD' || playlist.endlist) {
+      this._cancel(playlist.uri);
       if (this._checkIfAllEnd()) {
         print('State is set to "ended"');
         this.state = 'ended';
       }
     } else {
       print(`Wait for at least the target duration before attempting to reload the Playlist file again (${playlist.targetDuration}) sec`);
-      this._scedule(() => {
-        this._loadPlaylist(resolveUrl(this.options, this.url, playlist.uri));
+      this._schedule(playlist.uri, () => {
+        this._loadPlaylist(playlist.uri, playlist.parentUri);
       }, playlist.targetDuration * 1000);
     }
   }
@@ -289,22 +344,27 @@ class ReadStream extends stream.Readable {
     this._emit('data', playlist);
   }
 
-  _loadPlaylist(url) {
-    print(`_loadPlaylist("${url}")`);
+  _loadPlaylist(uri, parentUri = '') {
+    print(`_loadPlaylist("${uri}", ${parentUri})`);
+
     this._INCREMENT();
+
+    const url = this._resolveUri(uri, parentUri);
+
     this.loader.load(url, {noCache: true}, (err, result) => {
       this._DECREMENT();
       if (err) {
         return this._emit('error', err);
       }
       const hash = digest(result.data);
-      if (this._deferIfUnchanged(url, hash)) {
+      if (this._deferIfUnchanged(uri, parentUri, hash)) {
         // The file is not changed
         return;
       }
       const playlist = HLS.parse(result.data);
       playlist.source = result.data;
       playlist.uri = url.href;
+      playlist.parentUri = parentUri;
       playlist.hash = hash;
       if (playlist.isMasterPlaylist) {
         // Master Playlist
@@ -344,7 +404,7 @@ class ReadStream extends stream.Readable {
   _loadSegment(playlist, segment) {
     print(`_loadSegment("${segment.uri}")`);
     this._INCREMENT();
-    this.loader.load(resolveUrl(this.options, this.url, playlist.uri, segment.uri), {
+    this.loader.load(this._resolveUri(segment.uri, playlist.uri), {
           readAsBuffer: true,
           rawResponse: this.rawResponseMode
         }, (err, result) => {
@@ -379,7 +439,7 @@ class ReadStream extends stream.Readable {
         continue;
       }
       this._INCREMENT();
-      this.loader.load(resolveUrl(this.options, this.url, playlist.uri, sessionData.uri), (err, result) => {
+      this.loader.load(this._resolveUri(sessionData.uri, playlist.uri), (err, result) => {
         this._DECREMENT();
         if (err) {
           return this._emit('error', err);
@@ -406,7 +466,7 @@ class ReadStream extends stream.Readable {
 
   _loadKey(playlist, key, cb) {
     this._INCREMENT();
-    this.loader.load(resolveUrl(this.options, this.url, playlist.uri, key.uri), {readAsBuffer: true}, (err, result) => {
+    this.loader.load(this._resolveUri(key.uri, playlist.uri), {readAsBuffer: true}, (err, result) => {
       this._DECREMENT();
       if (err) {
         return this._emit('error', err);
@@ -418,7 +478,7 @@ class ReadStream extends stream.Readable {
 
   _loadMap(playlist, map, cb) {
     this._INCREMENT();
-    this.loader.load(resolveUrl(this.options, this.url, playlist.uri, map.uri), {readAsBuffer: true}, (err, result) => {
+    this.loader.load(this._resolveUri(map.uri, playlist.uri), {readAsBuffer: true}, (err, result) => {
       this._DECREMENT();
       if (err) {
         return this._emit('error', err);
@@ -440,7 +500,7 @@ class ReadStream extends stream.Readable {
   _read() {
     if (this.state === 'initialized') {
       this.state = 'reading';
-      this._loadPlaylist(this.url);
+      this._loadPlaylist(this.initialUri);
     }
   }
 }

@@ -160,7 +160,7 @@ test.cb('createReadStream.variant-increased', t => {
   const spyData = sinon.spy(obj, 'onData');
   const spyEnd = sinon.spy(obj, 'onEnd');
 
-  createReadStream('./manifest/master.m3u8')
+  createReadStream('file:///path/to/manifest/master.m3u8')
   .pipe(new Modifier())
   .on('data', obj.onData)
   .on('end', obj.onEnd);

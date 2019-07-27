@@ -1,15 +1,8 @@
 const {URL} = require('url');
 const path = require('path');
 const test = require('ava');
-const proxyquire = require('proxyquire');
 
-const mockFs = {
-  existsSync(path) {
-    return path === '/path/to/file';
-  }
-};
-
-const utils = proxyquire('../../utils', {fs: mockFs});
+const utils = require('../../utils');
 
 test('utils.THROW', t => {
   try {
@@ -111,8 +104,8 @@ test('utils.resolveUrl', t => {
   t.is(url.href, 'file:///var/path/to/non-file');
   url = utils.resolveUrl({rootPath: '/var'}, '../path/to/non-file');
   t.is(url.href, 'file:///path/to/non-file');
-  url = utils.resolveUrl({}, './path/to/non-file');
-  t.is(url.href, `file://${process.cwd()}/path/to/non-file`);
+  url = utils.resolveUrl({}, '/path/to/non-file');
+  t.is(url.href, 'file:///path/to/non-file');
   url = utils.resolveUrl({}, 'https://abc.com/dir/file.ext', '/dir2/file.ext', 'low/01.ts');
   t.is(url.href, 'https://abc.com/dir2/low/01.ts');
   url = utils.resolveUrl({}, 'https://abc.com/dir/file.ext', 'dir2/file.ext', '01.ts');
@@ -153,4 +146,13 @@ test('utils.pathToFileURL(...params)', t => {
   const BASEPATH = '/path/to/here';
   const result = utils.pathToFileURL(BASEPATH, PATH);
   t.is(result.pathname, path.resolve(BASEPATH, PATH));
+});
+
+test('utils.getUrlType', t => {
+  t.is(utils.getUrlType('http://foo.bar/dir/file'), 'absolute');
+  t.is(utils.getUrlType('file:///path/to/file'), 'absolute');
+  t.is(utils.getUrlType('//foo.bar/dir/file'), 'scheme-relative');
+  t.is(utils.getUrlType('/dir/file'), 'path-absolute');
+  t.is(utils.getUrlType('dir/file'), 'path-relative');
+  t.is(utils.getUrlType('file'), 'path-relative');
 });

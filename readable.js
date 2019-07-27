@@ -46,8 +46,7 @@ function cloneData(data) {
     // Clone variants
     ['variants', 'sessionDataList', 'sessionKeyList'].forEach(prop => cloneList(masterPlaylist, prop));
     const {variants} = masterPlaylist;
-    for (const v of variants) {
-      const variant = clone(v);
+    for (const variant of variants) {
       // Clone renditions
       ['audio', 'video', 'subtitles', 'closedCaptions'].forEach(prop => cloneList(variant, prop));
     }
@@ -70,7 +69,7 @@ class ReadStream extends stream.Readable {
     this.mediaPlaylists = {};
     this.counter = 0;
     this.rawResponseMode = Boolean(options.rawResponse);
-    this.pendingList = new Set();
+    this.pendingList = new Map();
   }
 
   _INCREMENT() {
@@ -79,17 +78,18 @@ class ReadStream extends stream.Readable {
 
   _DECREMENT() {
     this.counter--;
-    this._checkIfConsumed();
+    this._resetIfConsumed();
   }
 
   get consumed() {
     return this.state === 'ended' && this.pendingList.size === 0 && this.counter === 0;
   }
 
-  _checkIfConsumed() {
+  _resetIfConsumed() {
     if (this.consumed) {
       this.state = 'close';
       setImmediate(() => {
+        print('Cancel all pending events');
         this._cancelAll();
         this.masterPlaylists = {};
         this.mediaPlaylists = {};
@@ -98,21 +98,31 @@ class ReadStream extends stream.Readable {
     }
   }
 
-  _scedule(func, timeout) {
-    if (this.state === 'ended') {
+  _scedule(key, func, timeout) {
+    if (this.state === 'ended' || this.pendingList.has(key)) {
       return false;
     }
     const id = setTimeout(() => {
-      this.pendingList.delete(id);
+      this.pendingList.delete(key);
       func();
-      this._checkIfConsumed();
+      this._resetIfConsumed();
     }, timeout);
-    this.pendingList.add(id);
+    this.pendingList.set(key, id);
     return true;
   }
 
+  _cancel(key) {
+    const timerId = this.pendingList.get(key);
+    if (timerId) {
+      clearTimeout(timerId);
+      this.pendingList.delete(key);
+      return true;
+    }
+    return false;
+  }
+
   _cancelAll() {
-    for (const timerId of this.pendingList) {
+    for (const timerId of this.pendingList.values()) {
       clearTimeout(timerId);
     }
     this.pendingList.clear();
@@ -152,11 +162,11 @@ class ReadStream extends stream.Readable {
 
   _deferIfUnchanged(url, hash) {
     const {masterPlaylists, mediaPlaylists} = this;
-    const playlist = masterPlaylists[url] || mediaPlaylists[url];
+    const playlist = masterPlaylists[url.href] || mediaPlaylists[url.href];
     if (playlist && playlist.hash === hash) {
       const waitSeconds = playlist.isMasterPlaylist ? masterPlaylistTimeout : playlist.targetDuration * 0.5;
       print(`No update. Wait for a period of one-half the target duration before retrying (${waitSeconds}) sec`);
-      this._scedule(() => {
+      this._scedule(url, () => {
         this._loadPlaylist(url);
       }, waitSeconds * 1000);
       return true;
@@ -170,7 +180,7 @@ class ReadStream extends stream.Readable {
     this.masterPlaylists[playlist.uri] = playlist;
     if (this._needToReload(playlist)) {
       print(`Wait for ${masterPlaylistTimeout} sec`);
-      this._scedule(() => {
+      this._scedule(playlist.uri, () => {
         this._loadPlaylist(resolveUrl(this.options, playlist.uri));
       }, masterPlaylistTimeout * 1000);
     }
@@ -260,13 +270,14 @@ class ReadStream extends stream.Readable {
     mediaPlaylists[playlist.uri] = playlist;
 
     if (playlist.playlistType === 'VOD' || playlist.endlist) {
+      this._cancel(playlist.uri);
       if (this._checkIfAllEnd()) {
         print('State is set to "ended"');
         this.state = 'ended';
       }
     } else {
       print(`Wait for at least the target duration before attempting to reload the Playlist file again (${playlist.targetDuration}) sec`);
-      this._scedule(() => {
+      this._scedule(playlist.uri, () => {
         this._loadPlaylist(resolveUrl(this.options, this.url, playlist.uri));
       }, playlist.targetDuration * 1000);
     }

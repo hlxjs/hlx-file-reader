@@ -1,4 +1,3 @@
-const fs = require('fs');
 const path = require('path');
 const {URL} = require('url');
 
@@ -70,9 +69,6 @@ function resolveUrl({rootPath = ''}, ...params) {
     if (type === 'absolute') {
       return new URL(curr);
     }
-    if (type === 'file') {
-      return pathToFileURL(curr);
-    }
     if (type === 'scheme-relative') {
       if (accum) {
         return new URL(`${accum.protocol}${curr}`);
@@ -104,10 +100,6 @@ function getUrlType(url) {
       }
     )) {
     return 'absolute';
-  }
-
-  if (fs.existsSync(url)) {
-    return 'file';
   }
 
   if (url.startsWith('//')) {

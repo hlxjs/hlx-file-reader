@@ -76,14 +76,14 @@ Creates a new `ReadStream` object.
 #### params
 | Name    | Type   | Required | Default | Description   |
 | ------- | ------ | -------- | ------- | ------------- |
-| location     | string | Yes      | N/A     | A local file path or a url of the playlist  |
+| location     | string | Yes      | N/A     | A url of the playlist  |
 | options | object | No       | {}      | See below     |
 
 #### options
 | Name        | Type   | Default | Description                       |
 | ----------- | ------ | ------- | --------------------------------- |
 | concurrency | number | 6       | Max number of requests concurrently processed |
-| rootPath | string | CWD  | Required if the `location` is a local file path and any root relative URLs (starting with '/') are contained in the playlist |
+| rootPath | string | "/" | Required if the `location` is a file url and any root relative URLs (starting with '/') are contained in the playlist |
 | rawResponse | boolean | false   | If true, the segment file (`Segment.data`) is read as a readable stream, default is as a `Buffer` |
 
 #### return value

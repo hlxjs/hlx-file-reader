@@ -62,7 +62,7 @@ class ReadStream extends stream.Readable {
     super({objectMode: true});
     this.loader = new Loader(options);
     this.state = 'initialized';
-    options.rootPath = options.rootPath || process.cwd();
+    options.rootPath = options.rootPath || '/';
     this.url = resolveUrl(options, location);
     this.options = options;
     this.masterPlaylists = {};

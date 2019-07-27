@@ -1,4 +1,3 @@
-const path = require('path');
 const {Readable, Transform} = require('stream');
 const test = require('ava');
 const sinon = require('sinon');
@@ -58,19 +57,17 @@ function buildFileBase(playlistUrl) {
   return `${subdir}/${fileBase}`;
 }
 
-const cwd = process.cwd();
-
 const pathList = [
-  path.join(cwd, '/manifest/master.m3u8'),
-  path.join(cwd, '/manifest/low/main.m3u8'),
-  path.join(cwd, '/manifest/low/sub1.m3u8'),
-  path.join(cwd, '/manifest/low/sub2.m3u8'),
-  path.join(cwd, '/manifest/mid/main.m3u8'),
-  path.join(cwd, '/manifest/mid/sub1.m3u8'),
-  path.join(cwd, '/manifest/mid/sub2.m3u8'),
-  path.join(cwd, '/manifest/high/main.m3u8'),
-  path.join(cwd, '/manifest/high/sub1.m3u8'),
-  path.join(cwd, '/manifest/high/sub2.m3u8')
+  '/path/to/manifest/master.m3u8',
+  '/path/to/manifest/low/main.m3u8',
+  '/path/to/manifest/low/sub1.m3u8',
+  '/path/to/manifest/low/sub2.m3u8',
+  '/path/to/manifest/mid/main.m3u8',
+  '/path/to/manifest/mid/sub1.m3u8',
+  '/path/to/manifest/mid/sub2.m3u8',
+  '/path/to/manifest/high/main.m3u8',
+  '/path/to/manifest/high/sub1.m3u8',
+  '/path/to/manifest/high/sub2.m3u8'
 ];
 
 const urlList = [
@@ -206,7 +203,7 @@ test.cb('createReadStream.renditions', t => {
   const spyData = sinon.spy(obj, 'onData');
   const spyEnd = sinon.spy(obj, 'onEnd');
 
-  createReadStream('./manifest/master.m3u8')
+  createReadStream('file:///path/to/manifest/master.m3u8', {rootPath: '/path/to'})
   .on('variants', obj.onVariants)
   .on('renditions', obj.onRenditions)
   .pipe(new Modifier())

@@ -2,7 +2,6 @@ const {Readable, Transform} = require('stream');
 const test = require('ava');
 const sinon = require('sinon');
 const proxyquire = require('proxyquire');
-const rewrite = require('../helper/rewriter');
 
 function getDataAndType(url, end) {
   const type = 'application/vnd.apple.mpegurl';
@@ -57,45 +56,45 @@ function buildFileBase(playlistUrl) {
   return `${subdir}/${fileBase}`;
 }
 
-const urlList = [
-  'http://media.example.com/manifest/master.m3u8',
-  'http://media.example.com/manifest/low/main.m3u8',
-  'http://media.example.com/manifest/low/sub1.m3u8',
-  'http://media.example.com/manifest/low/sub2.m3u8',
-  'http://media.example.com/manifest/mid/main.m3u8',
-  'http://media.example.com/manifest/mid/sub1.m3u8',
-  'http://media.example.com/manifest/mid/sub2.m3u8',
-  'http://media.example.com/manifest/high/main.m3u8',
-  'http://media.example.com/manifest/high/sub1.m3u8',
-  'http://media.example.com/manifest/high/sub2.m3u8',
-  'http://media.example.com/segment/low/main-01.ts',
-  'http://media.example.com/segment/low/main-02.ts',
-  'http://media.example.com/segment/low/main-03.ts',
-  'http://media.example.com/segment/low/sub1-01.ts',
-  'http://media.example.com/segment/low/sub1-02.ts',
-  'http://media.example.com/segment/low/sub1-03.ts',
-  'http://media.example.com/segment/low/sub2-01.ts',
-  'http://media.example.com/segment/low/sub2-02.ts',
-  'http://media.example.com/segment/low/sub2-03.ts',
-  'http://media.example.com/segment/mid/main-01.ts',
-  'http://media.example.com/segment/mid/main-02.ts',
-  'http://media.example.com/segment/mid/main-03.ts',
-  'http://media.example.com/segment/mid/sub1-01.ts',
-  'http://media.example.com/segment/mid/sub1-02.ts',
-  'http://media.example.com/segment/mid/sub1-03.ts',
-  'http://media.example.com/segment/mid/sub2-01.ts',
-  'http://media.example.com/segment/mid/sub2-02.ts',
-  'http://media.example.com/segment/mid/sub2-03.ts',
-  'http://media.example.com/segment/high/main-01.ts',
-  'http://media.example.com/segment/high/main-02.ts',
-  'http://media.example.com/segment/high/main-03.ts',
-  'http://media.example.com/segment/high/sub1-01.ts',
-  'http://media.example.com/segment/high/sub1-02.ts',
-  'http://media.example.com/segment/high/sub1-03.ts',
-  'http://media.example.com/segment/high/sub2-01.ts',
-  'http://media.example.com/segment/high/sub2-02.ts',
-  'http://media.example.com/segment/high/sub2-03.ts'
-];
+const uriHash = {
+  'http://media.example.com/manifest/master.m3u8': '',
+  'http://media.example.com/manifest/low/main.m3u8': 'http://media.example.com/manifest/master.m3u8',
+  'http://media.example.com/manifest/low/sub1.m3u8': 'http://media.example.com/manifest/master.m3u8',
+  'http://media.example.com/manifest/low/sub2.m3u8': 'http://media.example.com/manifest/master.m3u8',
+  'http://media.example.com/manifest/mid/main.m3u8': 'http://media.example.com/manifest/master.m3u8',
+  'http://media.example.com/manifest/mid/sub1.m3u8': 'http://media.example.com/manifest/master.m3u8',
+  'http://media.example.com/manifest/mid/sub2.m3u8': 'http://media.example.com/manifest/master.m3u8',
+  'http://media.example.com/manifest/high/main.m3u8': 'http://media.example.com/manifest/master.m3u8',
+  'http://media.example.com/manifest/high/sub1.m3u8': 'http://media.example.com/manifest/master.m3u8',
+  'http://media.example.com/manifest/high/sub2.m3u8': 'http://media.example.com/manifest/master.m3u8',
+  '../../segment/low/main-01.ts': 'http://media.example.com/manifest/low/main.m3u8',
+  '../../segment/low/main-02.ts': 'http://media.example.com/manifest/low/main.m3u8',
+  '../../segment/low/main-03.ts': 'http://media.example.com/manifest/low/main.m3u8',
+  '../../segment/low/sub1-01.ts': 'http://media.example.com/manifest/low/sub1.m3u8',
+  '../../segment/low/sub1-02.ts': 'http://media.example.com/manifest/low/sub1.m3u8',
+  '../../segment/low/sub1-03.ts': 'http://media.example.com/manifest/low/sub1.m3u8',
+  '../../segment/low/sub2-01.ts': 'http://media.example.com/manifest/low/sub2.m3u8',
+  '../../segment/low/sub2-02.ts': 'http://media.example.com/manifest/low/sub2.m3u8',
+  '../../segment/low/sub2-03.ts': 'http://media.example.com/manifest/low/sub2.m3u8',
+  '../../segment/mid/main-01.ts': 'http://media.example.com/manifest/mid/main.m3u8',
+  '../../segment/mid/main-02.ts': 'http://media.example.com/manifest/mid/main.m3u8',
+  '../../segment/mid/main-03.ts': 'http://media.example.com/manifest/mid/main.m3u8',
+  '../../segment/mid/sub1-01.ts': 'http://media.example.com/manifest/mid/sub1.m3u8',
+  '../../segment/mid/sub1-02.ts': 'http://media.example.com/manifest/mid/sub1.m3u8',
+  '../../segment/mid/sub1-03.ts': 'http://media.example.com/manifest/mid/sub1.m3u8',
+  '../../segment/mid/sub2-01.ts': 'http://media.example.com/manifest/mid/sub2.m3u8',
+  '../../segment/mid/sub2-02.ts': 'http://media.example.com/manifest/mid/sub2.m3u8',
+  '../../segment/mid/sub2-03.ts': 'http://media.example.com/manifest/mid/sub2.m3u8',
+  '../../segment/high/main-01.ts': 'http://media.example.com/manifest/high/main.m3u8',
+  '../../segment/high/main-02.ts': 'http://media.example.com/manifest/high/main.m3u8',
+  '../../segment/high/main-03.ts': 'http://media.example.com/manifest/high/main.m3u8',
+  '../../segment/high/sub1-01.ts': 'http://media.example.com/manifest/high/sub1.m3u8',
+  '../../segment/high/sub1-02.ts': 'http://media.example.com/manifest/high/sub1.m3u8',
+  '../../segment/high/sub1-03.ts': 'http://media.example.com/manifest/high/sub1.m3u8',
+  '../../segment/high/sub2-01.ts': 'http://media.example.com/manifest/high/sub2.m3u8',
+  '../../segment/high/sub2-02.ts': 'http://media.example.com/manifest/high/sub2.m3u8',
+  '../../segment/high/sub2-03.ts': 'http://media.example.com/manifest/high/sub2.m3u8'
+};
 
 function createStream(fn) {
   const readable = new Readable({objectMode: true});
@@ -121,7 +120,6 @@ test.cb('createReadStream.renditions', t => {
   const mockFetch = {
     fetch(url) {
       // console.log(`### ${url}`);
-      t.true(urlList.includes(url));
       const [data, type] = getDataAndType(url, endFlag[url]);
       endFlag[url] = true;
       return Promise.resolve({
@@ -153,46 +151,34 @@ test.cb('createReadStream.renditions', t => {
   const {createReadStream} = proxyquire('../..', {'./readable': mockReadable});
 
   const obj = {
-    onVariants() {
-      // Nop
-    },
-    onRenditions() {
-      // Nop
-    },
-    onData() {
-      // Nop
+    onData(data) {
+      // console.log(`### ${data.uri}, ${data.parentUri}`);
+      t.is(uriHash[data.uri], data.parentUri);
     },
     onEnd() {
       process.nextTick(checkResult);
     }
   };
 
-  class Modifier extends Transform {
+  class DummyTransform extends Transform {
     constructor() {
       super({objectMode: true});
     }
 
     _transform(data, _, cb) {
-      rewrite(data);
       cb(null, data);
     }
   }
 
-  const spyVariants = sinon.spy(obj, 'onVariants');
-  const spyRenditions = sinon.spy(obj, 'onRenditions');
   const spyData = sinon.spy(obj, 'onData');
   const spyEnd = sinon.spy(obj, 'onEnd');
 
   createReadStream('http://media.example.com/manifest/master.m3u8')
-  .on('variants', obj.onVariants)
-  .on('renditions', obj.onRenditions)
-  .pipe(new Modifier())
+  .pipe(new DummyTransform())
   .on('data', obj.onData)
   .on('finish', obj.onEnd);
 
   function checkResult() {
-    t.is(spyVariants.callCount, 1);
-    t.is(spyRenditions.callCount, 3);
     t.is(spyData.callCount, 1 + (9 * 2) + 27);
     t.true(spyEnd.calledOnce);
     t.end();

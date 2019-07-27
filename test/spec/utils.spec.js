@@ -147,3 +147,12 @@ test('utils.pathToFileURL(...params)', t => {
   const result = utils.pathToFileURL(BASEPATH, PATH);
   t.is(result.pathname, path.resolve(BASEPATH, PATH));
 });
+
+test('utils.getUrlType', t => {
+  t.is(utils.getUrlType('http://foo.bar/dir/file'), 'absolute');
+  t.is(utils.getUrlType('file:///path/to/file'), 'absolute');
+  t.is(utils.getUrlType('//foo.bar/dir/file'), 'scheme-relative');
+  t.is(utils.getUrlType('/dir/file'), 'path-absolute');
+  t.is(utils.getUrlType('dir/file'), 'path-relative');
+  t.is(utils.getUrlType('file'), 'path-relative');
+});

@@ -132,5 +132,6 @@ module.exports = {
   resolveUrl,
   fileURLToPath,
   pathToFileURL,
+  getUrlType,
   masterPlaylistTimeout: 10
 };

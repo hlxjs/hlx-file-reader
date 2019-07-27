@@ -208,7 +208,7 @@ test.cb('createReadStream.renditions', t => {
   .on('renditions', obj.onRenditions)
   .pipe(new Modifier())
   .on('data', obj.onData)
-  .on('end', obj.onEnd);
+  .on('finish', obj.onEnd);
 
   function checkResult() {
     t.is(spyVariants.callCount, 1);

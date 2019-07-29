@@ -22,6 +22,10 @@ class Cache {
       }
     }
 
+    if (isNaN(size) || size > this.MAX_CACHE_SIZE) {
+      return;
+    }
+
     while (this.size + size > this.MAX_CACHE_SIZE) {
       const url = this.fifo.shift();
       const entry = this.map.get(url);

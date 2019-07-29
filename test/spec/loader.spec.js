@@ -13,7 +13,7 @@ function createLoader() {
       const cb = params.pop();
       const err = path === '/not-found' ? new Error('Not Found') : null;
       setImmediate(() => {
-        cb(err);
+        cb(err, 'file contents string');
       });
     }
   };

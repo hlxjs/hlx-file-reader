@@ -141,9 +141,6 @@ class ReadStream extends stream.Readable {
   }
 
   _resolveUri(uri, documentUri) {
-    if (!uri || (!uri.endsWith('master.m3u8') && !documentUri)) {
-      throw new Error('documentUri is undefined');
-    }
     const type = getUrlType(uri);
 
     if (type === 'absolute') {

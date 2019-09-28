@@ -67,7 +67,7 @@
   },
   "dependencies": {
     "debug": "^4.1.1",
-    "hls-parser": "^0.4.5",
+    "hls-parser": "^0.4.6",
     "node-fetch": "^2.6.0",
     "through2-parallel": "^0.1.3"
   }

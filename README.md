@@ -85,6 +85,7 @@ Creates a new `ReadStream` object.
 | concurrency | number | 6       | Max number of requests concurrently processed |
 | rootPath | string | "/" | Required if the `location` is a file url and any root relative URLs (starting with '/') are contained in the playlist |
 | rawResponse | boolean | false   | If true, the segment file (`Segment.data`) is read as a readable stream, default is as a `Buffer` |
+| playlistOnly | boolean | false   | If true, the segment file are not loaded and only playlists are loaded |
 
 #### return value
 An instance of `ReadStream`.

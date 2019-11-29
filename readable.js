@@ -400,6 +400,9 @@ class ReadStream extends stream.Readable {
 
   _loadSegment(playlist, segment) {
     print(`_loadSegment("${segment.uri}")`);
+    if (this.options.playlistOnly) {
+      print('\tplaylistOnly. exit');
+    }
     this._INCREMENT();
     this.loader.load(this._resolveUri(segment.uri, playlist.uri), {
           readAsBuffer: true,
